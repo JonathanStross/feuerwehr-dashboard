@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feuerwehr Bensheim‑Schönberg – Alarm Monitor</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root{
+      --bg: #0f1115;
+      --panel: #151a23;
+      --panel-2: #10131a;
+      --text: #e8edf4;
+      --muted: #a7b1c2;
+      --border: #2a3240;
+      --accent: #d62828;
+      --accent-amber: #ffb703;
+      --ok: #16a34a;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --blue: #3b82f6;
+      --shadow: 0 8px 24px rgba(0,0,0,.35);
+      --radius: 14px;
+      --overlay: rgba(10,12,18,.6);
+    }
+    *{ box-sizing: border-box; }
+    html, body{ height:100%; }
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans";
+      background: radial-gradient(1200px 800px at 15% -10%, rgba(214,40,40,.12), transparent 65%),
+                  radial-gradient(1000px 700px at 95% 110%, rgba(255,183,3,.08), transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    .app{ min-height:100vh; display:grid; grid-template-rows:auto 1fr auto; gap:16px; padding:16px; }
+    .topbar{
+      display:flex; align-items:center; justify-content: space-between;
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00)) , var(--panel);
+      border:1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .brand{ display:flex; align-items:center; gap: 12px; }
+    .brand .logo{ width: 28px; height: 28px; border-radius: 8px; display:grid; place-items:center;
+      background: radial-gradient(80% 80% at 50% 20%, rgba(214,40,40,.6), rgba(214,40,40,.2)), linear-gradient(180deg, #821d1d, #4c1010);
+      border: 1px solid #7a1b1b; box-shadow: inset 0 0 12px rgba(255,255,255,.05), 0 6px 16px rgba(214,40,40,.3);
+    }
+    .brand .title{ font-weight: 800; letter-spacing:.4px; font-size: clamp(16px, 2.2vw, 22px); }
+    .controls{ display:flex; align-items:center; gap:10px; }
+    .pill{
+      border:1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.0));
+      color: var(--text); padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight:700; letter-spacing:.2px;
+      cursor:pointer;
+    }
+    .pill:hover{ border-color:#3a4354; }
+    .grid{ display:grid; gap:16px; grid-template-columns: 1.1fr 1.9fr; }
+    @media (max-width: 1100px){ .grid{ grid-template-columns: 1fr; } }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00)) , var(--panel);
+      border:1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
+    }
+    .tag{ display:inline-block; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .stichwort{ position: relative; padding-left: 14px; border-left: 4px solid var(--accent); margin-bottom: 12px; }
+    .stichwort h1{ margin: 6px 0 0 0; font-size: clamp(28px, 4.2vw, 54px); line-height:1.08; letter-spacing: .2px; text-wrap: balance; }
+    .meta-grid{ display:grid; gap:12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 680px){ .meta-grid{ grid-template-columns: 1fr; } }
+    .kpi{ display:flex; align-items:center; justify-content: space-between; background: var(--panel-2);
+      border:1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-variant-numeric: tabular-nums; }
+    .kpi strong{ font-size: clamp(14px, 1.6vw, 18px); } .kpi span{ color: var(--muted); }
+    .address{ display:flex; align-items:center; gap: 8px; background: var(--panel-2);
+      border:1px solid var(--border); border-radius: 12px; padding: 12px; font-size: clamp(14px, 1.4vw, 18px); }
+    #map{ height:100%; min-height: 420px; border-radius: var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow: var(--shadow); }
+    .map-legend{ position:absolute; left:12px; bottom:12px; background: rgba(16,19,26,.82); backdrop-filter: blur(6px);
+      border:1px solid var(--border); border-radius: 10px; padding:6px 10px; display:flex; align-items:center; gap:12px; font-size:12px; color: var(--muted); }
+    .dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; border:1px solid rgba(255,255,255,.6); }
+    .dot.start{ background: var(--blue); } .dot.dest{ background: var(--accent); } .dot.route{ width:14px; height:4px; border-radius:10px; background: var(--accent); border:none; }
+    .route-metrics{ display:flex; gap:18px; flex-wrap: wrap; color: var(--muted); } .route-metrics strong{ color: var(--text); }
+    .fleet{ background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.00)) , var(--panel); border:1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
+    .fleet .head{ display:flex; align-items:center; justify-content: space-between; margin-bottom: 10px; }
+    .fleet-list{ display:grid; gap:12px; grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 1200px){ .fleet-list{ grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 900px){ .fleet-list{ grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 620px){ .fleet-list{ grid-template-columns: 1fr; } }
+    .vehicle-card{ display:flex; align-items:center; gap:14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+    .vehicle-card .order{ width: 40px; height: 40px; border-radius: 10px; display:grid; place-items:center; font-weight: 800; font-size: 20px;
+      background: linear-gradient(180deg, rgba(214,40,40,.15), rgba(214,40,40,.05)); border:1px solid #7a1b1b; color:#ffdede; box-shadow: inset 0 0 12px rgba(214,40,40,.2); }
+    .vehicle-card .name{ font-weight: 700; font-size: clamp(16px, 2vw, 20px); } .vehicle-card .spacer{ flex:1 1 auto; }
+    .status-pill{ display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius: 999px; font-weight:700; letter-spacing:.2px; font-size:13px;
+      background:#0f131b; border:1px solid var(--border); color: var(--muted); }
+    .status-pill .dot{ margin:0; width:8px; height:8px; border:none; }
+    .status-ready{ background: rgba(22,163,74,.12); color:#bff3cc; border-color: rgba(22,163,74,.35); } .status-ready .dot{ background: var(--ok); }
+    .status-out{ background: rgba(245,158,11,.14); color:#ffe6b8; border-color: rgba(245,158,11,.38); } .status-out .dot{ background: var(--warn); }
+    .status-enroute{ background: rgba(214,40,40,.16); color:#ffdede; border-color: rgba(214,40,40,.4); } .status-enroute .dot{ background: var(--danger);
+      box-shadow: 0 0 0 0 rgba(239,68,68,.6); animation: pulse 1.8s ease-out infinite; }
+    @keyframes pulse{ 0%{ box-shadow: 0 0 0 0 rgba(239,68,68,.70);} 70%{ box-shadow: 0 0 0 16px rgba(239,68,68,0);} 100%{ box-shadow:0 0 0 0 rgba(239,68,68,0);} }
+
+    /* Idle state */
+    body[data-mode="idle"] .active-only{ display:none !important; }
+    body[data-mode="active"] .idle-only{ display:none !important; }
+    .idle-wrap{ display:grid; gap:16px; grid-template-columns: 1.3fr 1.7fr; }
+    @media (max-width: 1100px){ .idle-wrap{ grid-template-columns: 1fr; } }
+    .big-time{ font-size: clamp(24px, 6vw, 72px); font-weight: 800; letter-spacing: .5px; }
+    .sub{ color: var(--muted); }
+    .hist-list{ display:grid; gap:12px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    @media (max-width: 900px){ .hist-list{ grid-template-columns: 1fr; } }
+    .hist-item{ background: var(--panel-2); border:1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .hist-item .h-top{ display:flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .hist-item .h-title{ font-weight: 800; }
+    .hist-item .h-meta{ font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+    .stats-grid{ display:grid; gap:12px; grid-template-columns: repeat(3, minmax(0,1fr)); }
+    @media (max-width: 900px){ .stats-grid{ grid-template-columns: 1fr; } }
+    .stat{ background: var(--panel-2); border:1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .stat .n{ font-size: clamp(18px, 3vw, 32px); font-weight: 800; }
+    .muted{ color: var(--muted); }
+    .foot{ color: var(--muted); text-align:center; font-size: 12px; margin-top: 4px; }
+
+    /* Flash overlay on new alarm */
+    .flash-overlay{
+      position: fixed; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.6), rgba(214,40,40,.2), transparent 65%);
+      opacity: 0; transition: opacity .25s ease; z-index: 999;
+    }
+    .flash-overlay.on{ opacity: .8; }
+
+    /* Settings modal */
+    .modal-backdrop{
+      position: fixed; inset:0; background: var(--overlay); display:none; z-index:1000;
+    }
+    .modal{ position: fixed; inset: 0; display:none; place-items:center; z-index:1001; }
+    .modal.show, .modal-backdrop.show{ display:grid; }
+    .modal-card{
+      width: min(720px, 92vw); background: var(--panel); border:1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 16px;
+    }
+    .modal-header{ display:flex; align-items:center; justify-content: space-between; margin-bottom: 8px; }
+    .modal-title{ font-weight: 800; letter-spacing:.3px; }
+    .modal-body{ display:grid; gap:14px; }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
+    select.sound-select{ flex:1 1 340px; background: var(--panel-2); border:1px solid var(--border); border-radius: 10px; padding: 8px 10px; color: var(--text); }
+    .btn{ border:1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.0)); color: var(--text); cursor:pointer; font-weight:700; }
+    .btn:hover{ border-color:#3a4354; }
+    .btn-primary{ border-color:#7a1b1b; background: linear-gradient(180deg, rgba(214,40,40,.18), rgba(214,40,40,.05)); }
+    .note{ color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body data-mode="idle">
+  <div class="flash-overlay" id="flash"></div>
+  <div class="modal-backdrop" id="settingsBackdrop"></div>
+  <div class="modal" id="settingsModal" aria-modal="true" role="dialog" aria-labelledby="settingsTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="settingsTitle">Einstellungen</div>
+        <button class="btn" id="settingsClose">Schließen ✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="tag">Sirenen‑Ton</div>
+        <div class="row">
+          <select id="soundSelect" class="sound-select"></select>
+          <button class="btn" id="soundTest">▶︎ Test</button>
+          <button class="btn btn-primary" id="soundApply">Aktivieren</button>
+        </div>
+        <div class="note">Alle Audiodateien im <code>/static/</code>-Ordner stehen hier zur Auswahl (mp3, wav, ogg, m4a).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flamme">
+            <path d="M13.5 2s1.5 6-4 9c-1.8 1-3.5 2.9-3.5 5.2 0 3.3 2.8 6 6.3 6 3.5 0 6.3-2.7 6.3-6 0-4.6-3.1-6.8-5.1-9.5-.9-1.2-1.3-2.7-0.9-4.7Z" fill="url(#g)"/>
+            <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="24"><stop stop-color="#ffb703"/><stop offset="1" stop-color="#d62828"/></linearGradient></defs>
+          </svg>
+        </div>
+        <div class="title" id="brandName">Feuerwehr Bensheim‑Schönberg</div>
+      </div>
+      <div class="controls">
+        <button id="settingsBtn" class="pill" title="Einstellungen">⚙︎ Einstellungen</button>
+        <button id="muteBtn" class="pill" title="Töne stummschalten/aktivieren">🔊 Ton</button>
+        <button id="fsBtn" class="pill" title="Vollbild umschalten">⤢ Vollbild</button>
+      </div>
+    </header>
+
+    <!-- ACTIVE STATE -->
+    <main class="grid active-only">
+      <section class="left vstack">
+        <div class="card">
+          <div class="tag">Alarmierungsstichwort</div>
+          <div class="stichwort"><h1 id="stichwort">–</h1></div>
+          <div class="meta-grid">
+            <div class="kpi"><strong>Alarmierung:</strong><span id="alarmTimeKpi">--</span></div>
+            <div class="kpi"><strong>Gültig bis</strong><span id="validUntilKpi">--</span></div>
+          </div>
+          <div class="meta-grid" style="margin-top:12px;">
+            <div class="kpi"><strong>Verstrichene Zeit</strong><span id="elapsed">00:00</span></div>
+            <div class="kpi"><strong>Restlaufzeit</strong><span id="remaining">--:--</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="tag">Additionale Infos der Leitstelle</div>
+          <ul id="infoList" style="margin:8px 0 0 0; padding-left:18px;"><li>–</li></ul>
+        </div>
+
+        <div class="card">
+          <div class="tag">Einsatzadresse</div>
+          <div id="adresse" class="address">–</div>
+        </div>
+
+        <div class="card">
+          <div class="tag">Anfahrtsweg</div>
+          <div class="route-metrics">
+            <div><strong>Distanz:</strong> <span id="routeDistance">–</span></div>
+            <div><strong>ETA (Routing):</strong> <span id="routeETA">–</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="map-panel" style="position:relative;">
+        <div id="map" aria-label="Karte mit Anfahrtsweg"></div>
+        <div class="map-legend">
+          <span class="dot start"></span> Wache
+          <span class="dot dest"></span> Einsatzort
+          <span class="dot route"></span> Route
+        </div>
+      </section>
+    </main>
+
+    <!-- IDLE STATE -->
+    <main class="idle-only">
+      <div class="idle-wrap">
+        <section class="card">
+          <div class="tag">Status</div>
+          <div class="big-time" id="sinceLast">–</div>
+          <div class="sub">Zeit seit der letzten Alarmierung</div>
+          <div style="height:12px;"></div>
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="muted">Alarmierungen heute</div>
+              <div class="n" id="statToday">0</div>
+            </div>
+            <div class="stat">
+              <div class="muted">Letzte 24h</div>
+              <div class="n" id="stat24h">0</div>
+            </div>
+            <div class="stat">
+              <div class="muted">Letzte 7 Tage</div>
+              <div class="n" id="stat7d">0</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tag">Historie</div>
+          <div id="histList" class="hist-list"></div>
+        </section>
+      </div>
+      <div class="foot">Wartet auf neue Alarmierung …</div>
+    </main>
+
+    <section class="fleet active-only">
+      <div class="head">
+        <div class="tag">Ausrücken-Reihenfolge</div>
+      </div>
+      <div id="fleetList" class="fleet-list"></div>
+      <div class="foot">Daten kommen live vom Backend.</div>
+    </section>
+  </div>
+
+  <!-- Audio element (Quelle wird dynamisch gesetzt) -->
+  <audio id="alarmAudio" preload="auto"></audio>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    "use strict";
+    const els = {
+      brandName: document.getElementById("brandName"),
+      stichwort: document.getElementById("stichwort"),
+      infoList: document.getElementById("infoList"),
+      adresse: document.getElementById("adresse"),
+      alarmTimeKpi: document.getElementById("alarmTimeKpi"),
+      validUntilKpi: document.getElementById("validUntilKpi"),
+      elapsed: document.getElementById("elapsed"),
+      remaining: document.getElementById("remaining"),
+      routeDistance: document.getElementById("routeDistance"),
+      routeETA: document.getElementById("routeETA"),
+      fleetList: document.getElementById("fleetList"),
+      muteBtn: document.getElementById("muteBtn"),
+      fsBtn: document.getElementById("fsBtn"),
+      flash: document.getElementById("flash"),
+      histList: document.getElementById("histList"),
+      sinceLast: document.getElementById("sinceLast"),
+      statToday: document.getElementById("statToday"),
+      stat24h: document.getElementById("stat24h"),
+      stat7d: document.getElementById("stat7d"),
+      settingsBtn: document.getElementById("settingsBtn"),
+      settingsModal: document.getElementById("settingsModal"),
+      settingsBackdrop: document.getElementById("settingsBackdrop"),
+      settingsClose: document.getElementById("settingsClose"),
+      soundSelect: document.getElementById("soundSelect"),
+      soundTest: document.getElementById("soundTest"),
+      soundApply: document.getElementById("soundApply"),
+      audio: document.getElementById("alarmAudio"),
+    };
+
+    const fmtDateTime = (d) => new Intl.DateTimeFormat("de-DE", { dateStyle:"short", timeStyle:"short" }).format(d);
+    const pad2 = (n) => String(n).padStart(2,"0");
+
+    // Audio state
+    let AUDIO_ENABLED = true;
+    let SOUND_LIST = [];
+    let SOUND_SELECTED = null;
+
+    // Ton Button
+    els.muteBtn.addEventListener("click", () => {
+      AUDIO_ENABLED = !AUDIO_ENABLED;
+      els.muteBtn.textContent = AUDIO_ENABLED ? "🔊 Ton" : "🔇 Stumm";
+    });
+
+    // Einmaliges Audio-Unlock (Safari/Chrome Autoplay-Regeln)
+    (function initAudioUnlock(){
+      function unlock(){
+        const el = els.audio;
+        if(el){
+          el.play().then(()=>{ try{ el.pause(); el.currentTime = 0; }catch(_){} }).catch(()=>{});
+        }
+        window.removeEventListener("click", unlock);
+        window.removeEventListener("keydown", unlock);
+      }
+      window.addEventListener("click", unlock, { once:true });
+      window.addEventListener("keydown", unlock, { once:true });
+    })();
+
+    async function loadSounds(){
+      try{
+        const r = await fetch("/sounds");
+        const js = await r.json();
+        SOUND_LIST = js.list || [];
+        SOUND_SELECTED = js.selected || (SOUND_LIST[0]?.filename ?? null);
+        // UI füllen
+        els.soundSelect.innerHTML = "";
+        for(const s of SOUND_LIST){
+          const opt = document.createElement("option");
+          opt.value = s.filename;
+          opt.textContent = `${s.filename} ${s.size ? `(${(s.size/1024).toFixed(0)} KB)` : ""}`;
+          if(s.filename === SOUND_SELECTED) opt.selected = true;
+          els.soundSelect.appendChild(opt);
+        }
+        // Quelle setzen
+        const chosen = SOUND_LIST.find(x => x.filename === SOUND_SELECTED);
+        if(chosen){
+          els.audio.src = chosen.url;
+          try{ els.audio.load(); }catch(_){}
+        }
+      }catch(e){
+        console.warn("Konnte Sounds nicht laden:", e);
+      }
+    }
+
+    async function applySelectedSound(){
+      const val = els.soundSelect.value;
+      if(!val) return;
+      try{
+        const r = await fetch("/sound", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ filename: val }) });
+        if(!r.ok){
+          const t = await r.text();
+          throw new Error(t || r.statusText);
+        }
+        SOUND_SELECTED = val;
+        const chosen = SOUND_LIST.find(x => x.filename === SOUND_SELECTED);
+        if(chosen){
+          els.audio.src = chosen.url;
+          try{ els.audio.load(); }catch(_){}
+        }
+      }catch(e){
+        alert("Konnte Ton nicht aktivieren: " + e.message);
+      }
+    }
+
+    async function testSelectedSound(){
+      if(!AUDIO_ENABLED) return;
+      const val = els.soundSelect.value;
+      const chosen = SOUND_LIST.find(x => x.filename === val) || SOUND_LIST.find(x => x.filename === SOUND_SELECTED);
+      if(!chosen) return;
+      try{
+        els.audio.src = chosen.url;
+        await els.audio.play();
+      }catch(e){
+        console.warn("Test-Wiedergabe fehlgeschlagen:", e);
+      }
+    }
+
+    // Settings UI
+    function openSettings(){
+      els.settingsBackdrop.classList.add("show");
+      els.settingsModal.classList.add("show");
+    }
+    function closeSettings(){
+      els.settingsBackdrop.classList.remove("show");
+      els.settingsModal.classList.remove("show");
+    }
+    els.settingsBtn.addEventListener("click", openSettings);
+    els.settingsClose.addEventListener("click", closeSettings);
+    els.settingsBackdrop.addEventListener("click", closeSettings);
+    els.soundApply.addEventListener("click", async ()=>{ await applySelectedSound(); closeSettings(); });
+    els.soundTest.addEventListener("click", testSelectedSound);
+
+    function flashScreen(){
+      const f = els.flash;
+      f.classList.add("on");
+      setTimeout(() => f.classList.remove("on"), 250);
+    }
+
+    // Map
+    let map, routeLayer, startMarker, zielMarker;
+    function ensureMap(){
+      if(map) return;
+      map = L.map("map", { zoomControl:false, attributionControl:false });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19 }).addTo(map);
+      L.control.scale({ metric:true, imperial:false }).addTo(map);
+    }
+    function renderRoute(route){
+      ensureMap();
+      if(routeLayer){ routeLayer.remove(); }
+      if(startMarker){ startMarker.remove(); }
+      if(zielMarker){ zielMarker.remove(); }
+      if(!route || !route.geometry) return;
+      routeLayer = L.polyline(route.geometry, { color:"#d62828", weight: 6, opacity: .9 }).addTo(map);
+      if(route.start){
+        startMarker = L.circleMarker([route.start.lat, route.start.lon], { radius:8, weight:2, color:"#ffffff", fillColor:"#3b82f6", fillOpacity:.95 }).addTo(map).bindTooltip("Wache", {permanent:true, direction:"right"});
+      }
+      if(route.ziel){
+        zielMarker = L.circleMarker([route.ziel.lat, route.ziel.lon], { radius:8, weight:2, color:"#ffffff", fillColor:"#d62828", fillOpacity:.95 }).addTo(map).bindTooltip("Einsatzort", {permanent:true, direction:"right"});
+      }
+      const bounds = routeLayer.getBounds().pad(0.18);
+      map.fitBounds(bounds);
+    }
+
+    function renderFleet(fleet){
+      const list = document.getElementById("fleetList");
+      list.innerHTML = "";
+      const ordered = [...(fleet||[])].sort((a,b) => a.order - b.order);
+      for(const v of ordered){
+        const card = document.createElement("div");
+        card.className = "vehicle-card";
+        const order = Object.assign(document.createElement("div"), { className:"order", textContent: v.order });
+        const name = Object.assign(document.createElement("div"), { className:"name", textContent: v.name });
+        const spacer = Object.assign(document.createElement("div"), { className:"spacer" });
+        const pill = Object.assign(document.createElement("div"), { className:"status-pill" });
+        const dot = Object.assign(document.createElement("span"), { className:"dot" });
+        const label = Object.assign(document.createElement("span"), { textContent: v.status });
+        pill.append(dot, label);
+
+        const s = (v.status||"").toLowerCase();
+        if(s.includes("bereit"))      pill.classList.add("status-ready");
+        else if(s.includes("anfahr") || s.includes("anmarsch")) pill.classList.add("status-enroute");
+        else if(s.includes("rückt") || s.includes("aus"))       pill.classList.add("status-out");
+
+        card.append(order, name, spacer, pill);
+        list.appendChild(card);
+      }
+    }
+
+    function setMode(mode){ document.body.setAttribute("data-mode", mode); }
+
+    let activeAlarm = null;
+    let timers = { elapsed: null, remaining: null, sinceLast: null };
+
+    function clearTimers(){
+      for(const k of Object.keys(timers)){
+        const id = timers[k];
+        if(id){ clearInterval(id); timers[k] = null; }
+      }
+    }
+
+    function playAlarmTone(){
+      if(!AUDIO_ENABLED) return;
+      const el = els.audio;
+      if(!el || !el.src) return;
+      el.currentTime = 0;
+      el.play().catch((e)=> console.warn("Audio play failed:", e));
+    }
+
+    function renderActive(payload){
+      activeAlarm = payload;
+      setMode("active");
+      clearTimers();
+
+      els.brandName.textContent = payload.agencyName || "Feuerwehr Bensheim‑Schönberg";
+      els.stichwort.textContent = payload.stichwort;
+      els.adresse.textContent = payload.adresse || "—";
+      els.infoList.innerHTML = "";
+      (payload.infos || []).forEach(t => {
+        const li = document.createElement("li"); li.textContent = t; els.infoList.appendChild(li);
+      });
+
+      const alarmDate = new Date(payload.zeit);
+      const validUntil = new Date(payload.valid_until);
+      els.alarmTimeKpi.textContent = fmtDateTime(alarmDate);
+      els.validUntilKpi.textContent = fmtDateTime(validUntil);
+
+      const tickElapsed = () => {
+        const now = new Date(); const diff = Math.max(0, now - alarmDate);
+        const m = Math.floor(diff/60000), s = Math.floor((diff%60000)/1000);
+        els.elapsed.textContent = `${pad2(m)}:${pad2(s)}`;
+      };
+      const tickRemaining = () => {
+        const now = new Date(); const diff = Math.max(0, validUntil - now);
+        const m = Math.floor(diff/60000), s = Math.floor((diff%60000)/1000);
+        els.remaining.textContent = `${pad2(m)}:${pad2(s)}`;
+      };
+      tickElapsed(); tickRemaining();
+      timers.elapsed = setInterval(tickElapsed, 1000);
+      timers.remaining = setInterval(tickRemaining, 1000);
+
+      renderRoute(payload.route || null);
+      if(payload.route){
+        const km = (payload.route.distance_m || 0) / 1000;
+        els.routeDistance.textContent = `${km.toFixed(1)} km`;
+        const durMin = Math.round((payload.route.duration_s || 0) / 60);
+        els.routeETA.textContent = `${durMin} min`;
+      } else {
+        els.routeDistance.textContent = "–";
+        els.routeETA.textContent = "–";
+      }
+
+      renderFleet(payload.fleet || []);
+
+      flashScreen();
+      playAlarmTone();
+    }
+
+    function humanizeSince(ms){
+      const s = Math.floor(ms/1000);
+      const d = Math.floor(s/86400);
+      const h = Math.floor((s%86400)/3600);
+      const m = Math.floor((s%3600)/60);
+      const sec = s%60;
+      if(d > 0) return `${d}T ${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
+      return `${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
+    }
+
+    function renderIdle(payload){
+      setMode("idle");
+      clearTimers();
+      const hist = (payload?.last_history) || [];
+      if(hist.length){
+        const last = hist[hist.length - 1];
+        const lastDate = new Date(last.zeit);
+        const update = () => {
+          const now = new Date(); const ms = now - lastDate;
+          els.sinceLast.textContent = humanizeSince(ms);
+        };
+        update(); timers.sinceLast = setInterval(update, 1000);
+      } else {
+        els.sinceLast.textContent = "—";
+      }
+      // stats
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0,10);
+      let cToday=0, c24=0, c7=0;
+      for(const h of hist){
+        const t = new Date(h.zeit);
+        if(t.toISOString().slice(0,10) === todayStr) cToday++;
+        if(now - t <= 24*3600*1000) c24++;
+        if(now - t <= 7*24*3600*1000) c7++;
+      }
+      els.statToday.textContent = cToday;
+      els.stat24h.textContent = c24;
+      els.stat7d.textContent = c7;
+
+      // history list
+      els.histList.innerHTML = "";
+      const lastN = hist.slice(-10).reverse();
+      for(const h of lastN){
+        const item = document.createElement("div");
+        item.className = "hist-item";
+        const top = document.createElement("div"); top.className = "h-top";
+        const title = document.createElement("div"); title.className = "h-title"; title.textContent = h.stichwort || "Alarm";
+        const meta = document.createElement("div"); meta.className = "h-meta";
+        const km = (h.distance_m ? (h.distance_m/1000).toFixed(1)+" km" : "–");
+        const min = (h.duration_s ? Math.round(h.duration_s/60)+" min" : "–");
+        meta.textContent = `${new Intl.DateTimeFormat("de-DE", { dateStyle:"short", timeStyle:"short" }).format(new Date(h.zeit))} · ${km} · ${min}`;
+        top.append(title, meta);
+        const addr = document.createElement("div"); addr.className = "muted"; addr.textContent = h.adresse || "—";
+        item.append(top, addr);
+        els.histList.appendChild(item);
+      }
+    }
+
+    // Fullscreen
+    els.fsBtn.addEventListener("click", () => {
+      if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.(); }
+      else{ document.exitFullscreen?.(); }
+    });
+    document.addEventListener("fullscreenchange", () => {
+      els.fsBtn.textContent = document.fullscreenElement ? "⤢ Vollbild verlassen" : "⤢ Vollbild";
+    });
+
+    // WebSocket
+    function connectWS(){
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      ws.onmessage = (ev) => {
+        try{
+          const msg = JSON.parse(ev.data);
+          if(msg.type === "hello"){
+            const { state, history } = msg.payload || {};
+            if(state?.current_alarm){ renderActive(state.current_alarm); }
+            else { renderIdle({ last_history: history }); }
+            // immer Sounds laden (damit Auswahl verfügbar ist)
+            loadSounds();
+          } else if(msg.type === "alarm"){
+            renderActive(msg.payload);
+          } else if(msg.type === "idle"){
+            renderIdle(msg.payload);
+          } else if(msg.type === "sound"){
+            // Sofort aktualisieren, wenn Admin Sound ändert
+            const sel = msg.payload?.selected;
+            if(sel && SOUND_LIST.length){
+              SOUND_SELECTED = sel;
+              const chosen = SOUND_LIST.find(x => x.filename === sel);
+              if(chosen){ els.audio.src = chosen.url; try{ els.audio.load(); }catch(_){ } }
+            } else {
+              // zur Sicherheit neu laden
+              loadSounds();
+            }
+          }
+        }catch(e){ console.error(e); }
+      };
+      ws.onclose = () => { setTimeout(connectWS, 1500); };
+    }
+    connectWS();
+
+    // Initial: Sounds laden (falls WS "hello" noch nicht kam)
+    loadSounds();
+  </script>
+</body>
+</html>
