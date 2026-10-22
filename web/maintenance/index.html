@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feuerwehr – Maintenance</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <script src="/static/shared/theme.js"></script>
+  <style>
+    :root, :root[data-theme="dark"]{
+      color-scheme: dark;
+      --bg:#0f1115; --panel:#151a23; --panel-2:#10131a; --text:#e8edf4; --muted:#a7b1c2; --border:#2a3240; --border-hover:#3a4354;
+      --accent:#d62828; --ok:#16a34a; --warn:#f59e0b; --danger:#ef4444; --blue:#3b82f6;
+      --shadow:0 8px 24px rgba(0,0,0,.35); --overlay:rgba(10,12,18,.7); --tile-filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.9) saturate(.8);
+    }
+    :root[data-theme="light"]{
+      color-scheme: light;
+      --bg:#eef1f6; --panel:#ffffff; --panel-2:#f3f5f9; --text:#172033; --muted:#5a6578; --border:#d5dbe6; --border-hover:#b7c0cf;
+      --accent:#c81e1e; --ok:#15803d; --warn:#d97706; --danger:#dc2626; --blue:#2563eb;
+      --shadow:0 6px 18px rgba(30,40,70,.12); --overlay:rgba(230,234,242,.8); --tile-filter:none;
+    }
+    *{ box-sizing:border-box; }
+    body{ margin:0; background:var(--bg); color:var(--text); transition:background-color .4s, color .4s;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .wrap{ max-width:1200px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+    header{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+      background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:10px 16px; box-shadow:var(--shadow); }
+    header h1{ font-size:18px; margin:0; letter-spacing:.3px; }
+    header h1 small{ color:var(--muted); font-weight:600; margin-left:6px; }
+    .seg{ display:inline-flex; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .seg button{ border:0; background:transparent; color:var(--text); padding:6px 10px; cursor:pointer; font:inherit; font-weight:700; font-size:13px; }
+    .seg button.on{ background:var(--accent); color:#fff; }
+    nav{ display:flex; gap:6px; flex-wrap:wrap; }
+    nav button{ border:1px solid var(--border); background:var(--panel); color:var(--text); border-radius:10px; padding:8px 14px; cursor:pointer; font:inherit; font-weight:700; }
+    nav button.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
+    nav .count{ background:var(--warn); color:#1b1300; border-radius:999px; padding:0 7px; margin-left:6px; font-size:12px; }
+    .card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:var(--shadow); }
+    .card h2{ margin:0 0 12px; font-size:16px; }
+    .tag{ font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:14px 0 6px; display:block; }
+    .grid2{ display:grid; gap:16px; grid-template-columns:1fr 1fr; }
+    @media (max-width:900px){ .grid2{ grid-template-columns:1fr; } }
+    label{ display:block; font-size:13px; font-weight:700; margin:10px 0 4px; }
+    input[type=text], input[type=number], input[type=password], input[type=datetime-local], select, textarea{
+      width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:9px 10px; font:inherit; }
+    textarea{ min-height:84px; resize:vertical; }
+    input:focus, select:focus, textarea:focus{ outline:2px solid var(--blue); outline-offset:-1px; }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .row > .grow{ flex:1 1 160px; }
+    .btn{ border:1px solid var(--border); background:var(--panel-2); color:var(--text); border-radius:10px; padding:8px 14px; cursor:pointer; font:inherit; font-weight:700; }
+    .btn:hover{ border-color:var(--border-hover); }
+    .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn.danger{ color:var(--danger); border-color:var(--danger); }
+    .btn.sm{ padding:4px 9px; font-size:13px; }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; }
+    .muted{ color:var(--muted); } .small{ font-size:13px; }
+    .chk{ display:flex; align-items:center; gap:8px; font-weight:600; margin:8px 0; }
+    .chk input{ width:auto; }
+    .list{ display:grid; gap:8px; }
+    .item{ display:flex; align-items:center; gap:10px; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:8px 10px; flex-wrap:wrap; }
+    .item .grow{ flex:1 1 180px; min-width:0; }
+    .item .ord{ width:26px; height:26px; border-radius:7px; background:var(--accent); color:#fff; display:grid; place-items:center; font-weight:800; font-size:13px; }
+    .chip{ display:inline-block; border:1px dashed var(--border-hover); border-radius:999px; padding:4px 11px; margin:3px 4px 0 0; cursor:pointer; background:transparent; color:var(--text); font:inherit; font-size:13px; font-weight:600; }
+    .chip:hover{ border-color:var(--accent); }
+    .badge{ display:inline-block; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:800; border:1px solid var(--border); }
+    .b-pending{ color:var(--warn); border-color:var(--warn); } .b-sent{ color:var(--ok); border-color:var(--ok); }
+    .b-cancelled, .b-missed{ color:var(--muted); } .b-failed{ color:var(--danger); border-color:var(--danger); }
+    #map{ height:260px; border-radius:10px; border:1px solid var(--border); margin-top:6px; }
+    #map .leaflet-tile-pane{ filter:var(--tile-filter); }
+    .geo-results{ display:grid; gap:4px; margin-top:6px; }
+    .geo-results button{ text-align:left; }
+    .hidden{ display:none !important; }
+    .banner{ background:rgba(245,158,11,.15); border:1px solid var(--warn); color:var(--text); border-radius:10px; padding:10px 14px; font-weight:600; }
+    #toast{ position:fixed; right:16px; bottom:16px; display:grid; gap:8px; z-index:3000; }
+    #toast div{ background:var(--panel); border:1px solid var(--border); border-left:4px solid var(--ok); border-radius:10px; padding:10px 14px; box-shadow:var(--shadow); max-width:360px; }
+    #toast div.err{ border-left-color:var(--danger); }
+    #login{ position:fixed; inset:0; background:var(--overlay); display:grid; place-items:center; z-index:2000; padding:16px; }
+    #login .card{ width:min(380px,100%); }
+    .big{ font-size:22px; font-weight:800; }
+    table{ width:100%; border-collapse:collapse; }
+    td, th{ text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); font-size:14px; }
+  </style>
+</head>
+<body>
+  <div id="login" class="hidden">
+    <form class="card" id="loginForm">
+      <h2>Maintenance – Anmeldung</h2>
+      <label for="pw">Passwort</label>
+      <input type="password" id="pw" autocomplete="current-password" autofocus />
+      <div class="row" style="margin-top:14px"><button class="btn primary" type="submit">Anmelden</button><span id="loginErr" class="small" style="color:var(--danger)"></span></div>
+      <p class="muted small">Die Anmeldung bleibt auf diesem Gerät dauerhaft bestehen.</p>
+    </form>
+  </div>
+  <div id="toast"></div>
+
+  <div class="wrap" id="app" hidden>
+    <header>
+      <h1>🔥 Feuerwehr Maintenance <small id="agency"></small></h1>
+      <div class="row">
+        <a class="btn sm" id="dashLink" target="_blank" rel="noopener">Dashboard öffnen ↗</a>
+        <div class="seg" id="themeSeg" title="Darstellung (gilt auch fürs Dashboard)">
+          <button data-m="auto">Auto</button><button data-m="light">☀ Hell</button><button data-m="dark">🌙 Dunkel</button>
+        </div>
+        <button class="btn sm" id="logoutBtn">Abmelden</button>
+      </div>
+    </header>
+    <div class="banner hidden" id="pwBanner">⚠ Es ist noch das Standard-Passwort aktiv – bitte unter „Einstellungen“ ändern.</div>
+
+    <nav id="tabs">
+      <button data-tab="incident" class="on">Einsatz anlegen</button>
+      <button data-tab="live">Live &amp; Geplant<span class="count hidden" id="schedCount"></span></button>
+      <button data-tab="templates">Vorlagen</button>
+      <button data-tab="vehicles">Fahrzeuge</button>
+      <button data-tab="history">Historie</button>
+      <button data-tab="settings">Einstellungen</button>
+      <button data-tab="mail">Leitstellen-Mail</button>
+    </nav>
+
+    <!-- ===== Einsatz anlegen ===== -->
+    <section data-pane="incident" class="grid2">
+      <div class="card">
+        <h2>Einsatz</h2>
+        <label for="f_template">Vorlage laden</label>
+        <select id="f_template"></select>
+        <label for="f_stichwort">Stichwort</label>
+        <input type="text" id="f_stichwort" placeholder="z. B. F2 – Rauchentwicklung" />
+        <label for="f_adresse">Einsatzadresse</label>
+        <div class="row"><input class="grow" type="text" id="f_adresse" placeholder="Straße Nr, PLZ Ort" /><button class="btn" id="geoBtn" type="button">📍 Koordinaten suchen</button></div>
+        <div class="geo-results" id="geoResults"></div>
+        <div class="row">
+          <div class="grow"><label for="f_lat">Breitengrad</label><input type="number" step="any" id="f_lat" /></div>
+          <div class="grow"><label for="f_lon">Längengrad</label><input type="number" step="any" id="f_lon" /></div>
+        </div>
+        <div class="muted small">Tipp: Auf die Karte klicken setzt den Einsatzort. Ohne Koordinaten gibt es keine Route.</div>
+        <div id="map"></div>
+        <label for="f_infos">Zusatzinfos der Leitstelle (eine pro Zeile)</label>
+        <textarea id="f_infos"></textarea>
+        <div class="row">
+          <div class="grow"><label for="f_valid">Gültigkeit (Minuten)</label><input type="number" id="f_valid" min="1" /></div>
+        </div>
+        <label class="chk"><input type="checkbox" id="f_exercise" /> Als Übung / fiktiv kennzeichnen (Badge im Dashboard)</label>
+        <label class="chk"><input type="checkbox" id="f_sound" /> Alarmton abspielen</label>
+      </div>
+
+      <div class="card">
+        <h2>Fahrzeuge &amp; Reihenfolge</h2>
+        <div class="list" id="selVehicles"></div>
+        <span class="tag">Hinzufügen</span>
+        <div id="availVehicles"></div>
+
+        <span class="tag">Auslösen</span>
+        <div class="row" style="margin-bottom:6px">
+          <label class="chk" style="margin:0"><input type="radio" name="mode" value="now" checked /> Sofort</label>
+          <label class="chk" style="margin:0"><input type="radio" name="mode" value="in" /> In</label>
+          <input type="number" id="f_minutes" min="1" value="5" style="width:90px" /> <span class="muted">Minuten</span>
+          <label class="chk" style="margin:0"><input type="radio" name="mode" value="at" /> Um</label>
+          <input type="datetime-local" id="f_at" style="width:auto" />
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="sendBtn">🚨 Einsatz auslösen</button>
+        </div>
+
+        <span class="tag">Als Vorlage speichern</span>
+        <div class="row">
+          <input class="grow" type="text" id="f_tplname" placeholder="Name der Vorlage" />
+          <button class="btn" id="tplNew">Neue Vorlage</button>
+          <button class="btn" id="tplOverwrite">Vorlage überschreiben</button>
+        </div>
+        <div class="muted small" id="tplHint"></div>
+      </div>
+    </section>
+
+    <!-- ===== Live & Geplant ===== -->
+    <section data-pane="live" class="hidden">
+      <div class="grid2">
+        <div class="card">
+          <h2>Aktueller Einsatz</h2>
+          <div id="liveBox"></div>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between"><h2 style="margin:0">Geplante Einsätze</h2><button class="btn sm" id="pruneBtn">Erledigte entfernen</button></div>
+          <div class="list" id="schedList" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Vorlagen ===== -->
+    <section data-pane="templates" class="hidden">
+      <div class="card"><h2>Vorlagen</h2>
+        <p class="muted small">Vorlagen bearbeitest du, indem du sie ins Formular lädst, änderst und unter „Einsatz anlegen“ mit „Vorlage überschreiben“ speicherst.</p>
+        <div class="list" id="tplList"></div></div>
+    </section>
+
+    <!-- ===== Fahrzeuge ===== -->
+    <section data-pane="vehicles" class="hidden">
+      <div class="card"><h2>Fahrzeugkatalog</h2>
+        <div class="list" id="vehList"></div>
+        <span class="tag">Neues Fahrzeug</span>
+        <div class="row">
+          <input class="grow" type="text" id="nv_name" placeholder="Funkrufname, z. B. LF 10 7-43-1" />
+          <input class="grow" type="text" id="nv_kind" placeholder="Typ (optional)" />
+          <button class="btn primary" id="nv_add">Hinzufügen</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Historie ===== -->
+    <section data-pane="history" class="hidden">
+      <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Historie</h2><button class="btn sm danger" id="histClear">Alle löschen</button></div>
+        <div class="list" id="histList" style="margin-top:10px"></div></div>
+    </section>
+
+    <!-- ===== Einstellungen ===== -->
+    <section data-pane="settings" class="hidden">
+      <div class="grid2">
+        <div class="card"><h2>Allgemein</h2>
+          <label for="s_agency">Name der Wache</label><input type="text" id="s_agency" />
+          <div class="row">
+            <div class="grow"><label for="s_lat">Wache – Breitengrad</label><input type="number" step="any" id="s_lat" /></div>
+            <div class="grow"><label for="s_lon">Wache – Längengrad</label><input type="number" step="any" id="s_lon" /></div>
+          </div>
+          <div class="muted small">Startpunkt der Route, Standort für Wetter und Sonnenauf-/untergang (Auto-Dunkelmodus).</div>
+          <label for="s_valid">Standard-Gültigkeit eines Einsatzes (Minuten)</label><input type="number" id="s_valid" min="1" />
+          <label for="s_theme">Darstellung</label>
+          <select id="s_theme"><option value="auto">Automatisch (dunkel von Sonnenuntergang bis Sonnenaufgang)</option><option value="light">Immer hell</option><option value="dark">Immer dunkel</option></select>
+          <div class="muted small" id="sunInfo"></div>
+          <label class="chk"><input type="checkbox" id="s_weather" /> Wetter im Dashboard anzeigen</label>
+          <label for="s_sound">Alarmton</label>
+          <div class="row"><select class="grow" id="s_sound"></select><button class="btn" id="s_soundTest" type="button">▶ Test</button></div>
+          <div class="row" style="margin-top:14px"><button class="btn primary" id="s_save">Einstellungen speichern</button></div>
+        </div>
+        <div class="card"><h2>Passwort ändern</h2>
+          <label for="p_cur">Aktuelles Passwort</label><input type="password" id="p_cur" autocomplete="current-password" />
+          <label for="p_new">Neues Passwort (min. 6 Zeichen)</label><input type="password" id="p_new" autocomplete="new-password" />
+          <div class="row" style="margin-top:14px"><button class="btn" id="p_save">Passwort ändern</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Leitstellen-Mail (Platzhalter) ===== -->
+    <section data-pane="mail" class="hidden">
+      <div class="card"><h2>Leitstellen-Mail <span class="badge">in Vorbereitung</span></h2>
+        <p>Hier entsteht später die Anbindung für echte Alarme: Die Leitstelle sendet eine E-Mail, sie wird geparst und direkt im Dashboard angezeigt.</p>
+        <div class="list">
+          <div class="item"><span class="grow"><b>Postfach</b><br><span class="muted small">IMAP-Zugang, Abrufintervall, Absender-Whitelist</span></span><span class="badge">geplant</span></div>
+          <div class="item"><span class="grow"><b>Parser &amp; Feld-Mapping</b><br><span class="muted small">Zuordnung Mail-Feld → Stichwort, Adresse, Koordinaten, Infos, Fahrzeuge</span></span><span class="badge">geplant</span></div>
+          <div class="item"><span class="grow"><b>Test-Parser</b><br><span class="muted small">Beispiel-Mail einfügen und das Ergebnis vor dem Livebetrieb prüfen</span></span><span class="badge">geplant</span></div>
+        </div>
+        <p class="muted small">Technisch ist alles vorbereitet: Ein geparster Alarm wird wie ein hier angelegter Einsatz per <code>POST /api/alarm</code> ans Dashboard gesendet. Details stehen in der README.</p>
+      </div>
+    </section>
+  </div>
+
+  <audio id="testAudio"></audio>
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script>
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, ...kids) => {
+    const n = Object.assign(document.createElement(tag), props);
+    kids.forEach((k) => n.append(k));
+    return n;
+  };
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const fmt = (iso) => new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "medium" }).format(new Date(iso));
+
+  function toast(msg, err) {
+    const t = el("div", { textContent: msg, className: err ? "err" : "" });
+    $("toast").append(t); setTimeout(() => t.remove(), err ? 7000 : 3500);
+  }
+  class AuthError extends Error {}
+  async function api(path, opts = {}) {
+    const o = { method: "GET", ...opts, headers: { ...(opts.body ? { "Content-Type": "application/json" } : {}) } };
+    if (opts.body && typeof opts.body !== "string") o.body = JSON.stringify(opts.body);
+    const r = await fetch(path, o);
+    if (r.status === 401 && path !== "/api/login") { showLogin(); throw new AuthError(); }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || r.statusText));
+    return data;
+  }
+  async function act(fn, okMsg) {
+    try { const r = await fn(); if (okMsg) toast(okMsg); return r; }
+    catch (e) { if (!(e instanceof AuthError)) toast(e.message, true); return null; }
+  }
+
+  // ---------------- Login ----------------
+  let META = null, started = false;
+  function showLogin() { $("login").classList.remove("hidden"); $("app").hidden = true; $("pw").focus(); }
+  $("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault(); $("loginErr").textContent = "";
+    try { await api("/api/login", { method: "POST", body: { password: $("pw").value } }); $("pw").value = ""; await boot(); }
+    catch (err) { $("loginErr").textContent = err.message; }
+  });
+  $("logoutBtn").addEventListener("click", async () => { await api("/api/logout", { method: "POST" }); location.reload(); });
+
+  async function boot() {
+    const me = await api("/api/me");
+    if (!me.authenticated) return showLogin();
+    $("login").classList.add("hidden"); $("app").hidden = false;
+    Theme.set({ mode: me.settings.theme_mode, station: me.settings.station });
+    $("pwBanner").classList.toggle("hidden", !me.default_password);
+    await loadMeta();
+    if (!started) { started = true; initIncident(); setInterval(poll, 3000); }
+    renderAll(); poll();
+  }
+
+  async function loadMeta() {
+    META = await api("/api/meta");
+    const s = META.settings;
+    Theme.set({ mode: s.theme_mode, station: s.station });
+    $("agency").textContent = s.agency_name;
+    $("dashLink").href = `${location.protocol}//${location.hostname}:8080/`;
+    markTheme();
+  }
+
+  // ---------------- Tabs & Theme ----------------
+  function showTab(name) {
+    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+    document.querySelectorAll("[data-pane]").forEach((p) => p.classList.toggle("hidden", p.dataset.pane !== name));
+    if (name === "incident" && map) setTimeout(() => map.invalidateSize(), 50);
+    if (name === "history") renderHistory();
+    if (name === "settings") renderSettings();
+    poll();
+  }
+  $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) showTab(b.dataset.tab); });
+  const curTab = () => document.querySelector("#tabs button.on").dataset.tab;
+
+  function markTheme() { document.querySelectorAll("#themeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === Theme.mode)); }
+  $("themeSeg").addEventListener("click", async (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const r = await act(() => api("/api/settings/theme", { method: "PUT", body: { theme_mode: b.dataset.m } }));
+    if (r) { META.settings.theme_mode = b.dataset.m; Theme.set({ mode: b.dataset.m }); markTheme(); $("s_theme").value = b.dataset.m; }
+  });
+
+  // ---------------- Einsatz-Formular ----------------
+  let map, marker, selected = [];      // selected: [{vehicle_id, status}]
+  const defaultStatus = () => META.statuses[0].key;
+
+  function setCoords(lat, lon, pan) {
+    $("f_lat").value = lat == null ? "" : (+lat).toFixed(6); $("f_lon").value = lon == null ? "" : (+lon).toFixed(6);
+    if (!map) return;
+    if (marker) { marker.remove(); marker = null; }
+    if (lat != null && lon != null) { marker = L.marker([lat, lon]).addTo(map); if (pan) map.setView([lat, lon], 15); }
+  }
+  function initIncident() {
+    const st = META.settings.station;
+    map = L.map("map").setView([st.lat, st.lon], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    L.circleMarker([st.lat, st.lon], { radius: 7, color: "#fff", fillColor: "#3b82f6", fillOpacity: 1 }).addTo(map).bindTooltip("Wache");
+    map.on("click", (e) => setCoords(e.latlng.lat, e.latlng.lng, false));
+    const syncMarker = () => { const la = parseFloat($("f_lat").value), lo = parseFloat($("f_lon").value); if (!isNaN(la) && !isNaN(lo)) setCoords(la, lo, true); };
+    $("f_lat").addEventListener("change", syncMarker); $("f_lon").addEventListener("change", syncMarker);
+
+    $("f_template").addEventListener("change", () => {
+      const t = META.templates.find((x) => x.id === $("f_template").value);
+      if (t) loadTemplate(t);
+    });
+    $("geoBtn").addEventListener("click", geocode);
+    $("f_adresse").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); geocode(); } });
+    $("sendBtn").addEventListener("click", send);
+    $("tplNew").addEventListener("click", () => saveTemplate(false));
+    $("tplOverwrite").addEventListener("click", () => saveTemplate(true));
+    document.querySelectorAll("input[name=mode]").forEach((r) => r.addEventListener("change", updateSendBtn));
+    $("f_minutes").addEventListener("focus", () => document.querySelector("input[name=mode][value=in]").click());
+    $("f_at").addEventListener("focus", () => document.querySelector("input[name=mode][value=at]").click());
+    resetForm();
+  }
+
+  function resetForm() {
+    const s = META.settings;
+    $("f_template").value = "";
+    ["f_stichwort", "f_adresse", "f_infos", "f_tplname"].forEach((i) => ($(i).value = ""));
+    $("f_valid").value = s.valid_minutes_default; $("f_exercise").checked = true; $("f_sound").checked = true;
+    setCoords(null, null); selected = []; renderVehicleSelect(); updateSendBtn();
+  }
+  function loadTemplate(t) {
+    $("f_stichwort").value = t.stichwort || ""; $("f_adresse").value = t.adresse || "";
+    $("f_infos").value = (t.infos || []).join("\n");
+    $("f_valid").value = t.valid_minutes || META.settings.valid_minutes_default;
+    $("f_exercise").checked = t.exercise !== false; $("f_tplname").value = t.name;
+    setCoords(t.lat ?? null, t.lon ?? null, true);
+    const known = new Set(META.vehicles.map((v) => v.id));
+    selected = (t.vehicle_ids || []).filter((id) => known.has(id)).map((id) => ({ vehicle_id: id, status: defaultStatus() }));
+    renderVehicleSelect(); renderHint();
+  }
+  function renderHint() {
+    const t = META.templates.find((x) => x.id === $("f_template").value);
+    $("tplHint").textContent = t ? `Ausgewählte Vorlage: „${t.name}“ – „Vorlage überschreiben“ ersetzt sie.` : "";
+  }
+  $("f_template")?.addEventListener("change", renderHint);
+
+  function renderTemplateSelect() {
+    const sel = $("f_template"), cur = sel.value;
+    sel.innerHTML = ""; sel.append(el("option", { value: "", textContent: "– leeres Formular –" }));
+    META.templates.forEach((t) => sel.append(el("option", { value: t.id, textContent: t.name })));
+    sel.value = META.templates.some((t) => t.id === cur) ? cur : "";
+  }
+
+  function renderVehicleSelect() {
+    const list = $("selVehicles"); list.innerHTML = "";
+    const byId = Object.fromEntries(META.vehicles.map((v) => [v.id, v]));
+    if (!selected.length) list.append(el("div", { className: "muted small", textContent: "Noch kein Fahrzeug ausgewählt." }));
+    selected.forEach((s, i) => {
+      const v = byId[s.vehicle_id]; if (!v) return;
+      const st = el("select", { style: "width:auto" });
+      META.statuses.forEach((x) => st.append(el("option", { value: x.key, textContent: x.key, selected: x.key === s.status })));
+      st.addEventListener("change", () => (s.status = st.value));
+      const mv = (d) => () => { const j = i + d; if (j < 0 || j >= selected.length) return; [selected[i], selected[j]] = [selected[j], selected[i]]; renderVehicleSelect(); };
+      list.append(el("div", { className: "item" },
+        el("span", { className: "ord", textContent: i + 1 }),
+        el("span", { className: "grow", innerHTML: "" }, el("b", { textContent: v.name }), el("span", { className: "muted small", textContent: v.kind ? "  " + v.kind : "" })),
+        st,
+        Object.assign(el("button", { className: "btn sm", textContent: "↑", title: "nach oben" }), { onclick: mv(-1) }),
+        Object.assign(el("button", { className: "btn sm", textContent: "↓", title: "nach unten" }), { onclick: mv(1) }),
+        Object.assign(el("button", { className: "btn sm danger", textContent: "✕", title: "entfernen" }), { onclick: () => { selected.splice(i, 1); renderVehicleSelect(); } }),
+      ));
+    });
+    const av = $("availVehicles"); av.innerHTML = "";
+    const chosen = new Set(selected.map((s) => s.vehicle_id));
+    const free = META.vehicles.filter((v) => v.active && !chosen.has(v.id));
+    if (!free.length) av.append(el("span", { className: "muted small", textContent: "Keine weiteren aktiven Fahrzeuge." }));
+    free.forEach((v) => av.append(Object.assign(el("button", { className: "chip", textContent: "+ " + v.name }),
+      { onclick: () => { selected.push({ vehicle_id: v.id, status: defaultStatus() }); renderVehicleSelect(); } })));
+  }
+
+  async function geocode() {
+    const q = $("f_adresse").value.trim(); if (!q) return toast("Bitte erst eine Adresse eingeben.", true);
+    const box = $("geoResults"); box.innerHTML = "";
+    const res = await act(() => api("/api/geocode?q=" + encodeURIComponent(q)));
+    if (!res) return;
+    if (!res.length) { box.append(el("div", { className: "muted small", textContent: "Nichts gefunden – Koordinaten bitte per Kartenklick setzen." })); return; }
+    res.forEach((r) => box.append(Object.assign(el("button", { className: "btn sm", textContent: r.label }),
+      { onclick: () => { setCoords(r.lat, r.lon, true); box.innerHTML = ""; } })));
+  }
+
+  function collect() {
+    const lat = parseFloat($("f_lat").value), lon = parseFloat($("f_lon").value);
+    const byId = Object.fromEntries(META.vehicles.map((v) => [v.id, v]));
+    return {
+      stichwort: $("f_stichwort").value.trim(), adresse: $("f_adresse").value.trim() || null,
+      lat: isNaN(lat) ? null : lat, lon: isNaN(lon) ? null : lon,
+      infos: $("f_infos").value.split("\n").map((x) => x.trim()).filter(Boolean),
+      valid_minutes: parseInt($("f_valid").value) || null,
+      fleet: selected.filter((s) => byId[s.vehicle_id]).map((s) => ({ vehicle_id: s.vehicle_id, name: byId[s.vehicle_id].name, status: s.status })),
+      exercise: $("f_exercise").checked, play_sound: $("f_sound").checked,
+    };
+  }
+  const mode = () => document.querySelector("input[name=mode]:checked").value;
+  function updateSendBtn() {
+    $("sendBtn").textContent = mode() === "now" ? "🚨 Einsatz auslösen" : "⏱ Einsatz planen";
+  }
+  async function send() {
+    const payload = collect();
+    if (!payload.stichwort) return toast("Bitte ein Stichwort eingeben.", true);
+    const m = mode(), body = { payload, mode: m };
+    if (m === "in") body.minutes = parseFloat($("f_minutes").value);
+    if (m === "at") { if (!$("f_at").value) return toast("Bitte Datum/Uhrzeit wählen.", true); body.at = new Date($("f_at").value).toISOString(); }
+    $("sendBtn").disabled = true;
+    const r = await act(() => api("/api/send", { method: "POST", body }));
+    $("sendBtn").disabled = false;
+    if (!r) return;
+    if (r.sent) { toast("Einsatz ausgelöst."); showTab("live"); }
+    else { toast("Einsatz geplant für " + fmt(r.scheduled.at)); showTab("live"); }
+  }
+
+  async function saveTemplate(overwrite) {
+    const p = collect(), name = $("f_tplname").value.trim();
+    if (!name) return toast("Bitte einen Namen für die Vorlage eingeben.", true);
+    const body = { name, stichwort: p.stichwort, adresse: p.adresse, lat: p.lat, lon: p.lon, infos: p.infos,
+                   vehicle_ids: selected.map((s) => s.vehicle_id), valid_minutes: p.valid_minutes, exercise: p.exercise };
+    const id = $("f_template").value;
+    if (overwrite && !id) return toast("Keine Vorlage ausgewählt – nutze „Neue Vorlage“.", true);
+    const r = await act(() => api(overwrite ? `/api/templates/${id}` : "/api/templates", { method: overwrite ? "PUT" : "POST", body }), "Vorlage gespeichert.");
+    if (r) { await loadMeta(); renderTemplateSelect(); $("f_template").value = r.id; renderHint(); renderTemplates(); }
+  }
+
+  // ---------------- Live & Geplant ----------------
+  const statusLabel = { pending: "geplant", sent: "ausgelöst", cancelled: "abgebrochen", missed: "verpasst", failed: "Fehler" };
+  let liveState = null, schedules = [];
+  async function poll() {
+    if (!started || $("app").hidden) return;
+    try {
+      const [live, sch] = await Promise.all([api("/api/live").catch((e) => { if (e instanceof AuthError) throw e; return null; }), api("/api/schedules")]);
+      liveState = live; schedules = sch;
+      const pending = sch.filter((s) => s.status === "pending").length;
+      $("schedCount").textContent = pending; $("schedCount").classList.toggle("hidden", !pending);
+      if (curTab() === "live") { renderLive(); renderSchedules(); }
+    } catch (e) { /* offline/Login */ }
+  }
+  function renderLive() {
+    const box = $("liveBox"); box.innerHTML = "";
+    if (!liveState) { box.append(el("div", { className: "muted", textContent: "Dashboard nicht erreichbar." })); return; }
+    const a = liveState.current_alarm;
+    if (!a) { box.append(el("div", { className: "muted", textContent: "Kein aktiver Einsatz – das Dashboard zeigt den Leerlauf." })); return; }
+    const remain = Math.max(0, Math.round((new Date(a.valid_until) - new Date()) / 1000));
+    box.append(el("div", { className: "big", textContent: (a.exercise ? "[Übung] " : "") + a.stichwort }),
+      el("div", { className: "muted", textContent: `${a.adresse || "–"} · seit ${fmt(a.zeit)} · noch ${pad2(Math.floor(remain / 60))}:${pad2(remain % 60)} min` }));
+    box.append(el("span", { className: "tag", textContent: "Fahrzeugstatus (live)" }));
+    const list = el("div", { className: "list" });
+    (a.fleet || []).forEach((f) => {
+      const sel = el("select", { style: "width:auto" });
+      META.statuses.forEach((x) => sel.append(el("option", { value: x.key, textContent: x.key, selected: x.key === f.status })));
+      sel.addEventListener("change", () => act(() => api("/api/live/vehicle-status", { method: "POST", body: { order: f.order, status: sel.value } }), `${f.name}: ${sel.value}`));
+      list.append(el("div", { className: "item" }, el("span", { className: "ord", textContent: f.order }), el("b", { className: "grow", textContent: f.name }), sel));
+    });
+    if (!a.fleet.length) list.append(el("div", { className: "muted small", textContent: "Keine Fahrzeuge zugeordnet." }));
+    box.append(list, el("div", { className: "row", style: "margin-top:14px" },
+      Object.assign(el("button", { className: "btn danger", textContent: "Einsatz beenden" }), {
+        onclick: () => { if (confirm("Einsatz jetzt beenden?")) act(() => api("/api/live/end", { method: "POST" }), "Einsatz beendet.").then(poll); } })));
+  }
+  function countdown(iso) {
+    const s = Math.round((new Date(iso) - new Date()) / 1000);
+    if (s <= 0) return "jetzt";
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return (h ? h + " h " : "") + `${m} min ${pad2(s % 60)} s`;
+  }
+  function renderSchedules() {
+    const box = $("schedList"); box.innerHTML = "";
+    if (!schedules.length) { box.append(el("div", { className: "muted small", textContent: "Keine geplanten Einsätze." })); return; }
+    schedules.forEach((s) => {
+      const info = el("span", { className: "grow" }, el("b", { textContent: s.stichwort }),
+        el("div", { className: "muted small", textContent: `${fmt(s.at)}${s.status === "pending" ? " · in " + countdown(s.at) : ""}${s.error ? " · " + s.error : ""}` }));
+      const item = el("div", { className: "item" }, info, el("span", { className: "badge b-" + s.status, textContent: statusLabel[s.status] || s.status }));
+      if (s.status === "pending") {
+        item.append(Object.assign(el("button", { className: "btn sm", textContent: "Jetzt auslösen" }), { onclick: () => act(() => api(`/api/schedules/${s.id}/fire`, { method: "POST" }), "Ausgelöst.").then(poll) }),
+          Object.assign(el("button", { className: "btn sm danger", textContent: "Abbrechen" }), { onclick: () => act(() => api(`/api/schedules/${s.id}/cancel`, { method: "POST" }), "Abgebrochen.").then(poll) }));
+      }
+      box.append(item);
+    });
+  }
+  $("pruneBtn").addEventListener("click", () => act(() => api("/api/schedules", { method: "DELETE" })).then(poll));
+  setInterval(() => { if (started && curTab() === "live") { renderSchedules(); renderLive(); } }, 1000);
+
+  // ---------------- Vorlagen ----------------
+  function renderTemplates() {
+    const box = $("tplList"); box.innerHTML = "";
+    if (!META.templates.length) box.append(el("div", { className: "muted small", textContent: "Noch keine Vorlagen." }));
+    const byId = Object.fromEntries(META.vehicles.map((v) => [v.id, v.name]));
+    META.templates.forEach((t) => box.append(el("div", { className: "item" },
+      el("span", { className: "grow" }, el("b", { textContent: t.name }),
+        el("div", { className: "muted small", textContent: `${t.adresse || "–"} · ${(t.vehicle_ids || []).map((i) => byId[i]).filter(Boolean).join(", ") || "keine Fahrzeuge"}` })),
+      Object.assign(el("button", { className: "btn sm", textContent: "Ins Formular laden" }), { onclick: () => { showTab("incident"); $("f_template").value = t.id; loadTemplate(t); } }),
+      Object.assign(el("button", { className: "btn sm danger", textContent: "Löschen" }), { onclick: async () => {
+        if (!confirm(`Vorlage „${t.name}“ löschen?`)) return;
+        if (await act(() => api(`/api/templates/${t.id}`, { method: "DELETE" }), "Vorlage gelöscht.")) { await loadMeta(); renderTemplateSelect(); renderTemplates(); } } }))));
+  }
+
+  // ---------------- Fahrzeuge ----------------
+  function renderVehicles() {
+    const box = $("vehList"); box.innerHTML = "";
+    META.vehicles.forEach((v) => {
+      const name = el("input", { type: "text", value: v.name, className: "grow" });
+      const kind = el("input", { type: "text", value: v.kind || "", placeholder: "Typ", className: "grow" });
+      const active = el("input", { type: "checkbox", checked: v.active });
+      box.append(el("div", { className: "item" }, name, kind,
+        el("label", { className: "chk", style: "margin:0" }, active, document.createTextNode("aktiv")),
+        Object.assign(el("button", { className: "btn sm", textContent: "Speichern" }), { onclick: async () => {
+          if (await act(() => api(`/api/vehicles/${v.id}`, { method: "PUT", body: { name: name.value, kind: kind.value, active: active.checked } }), "Gespeichert.")) { await loadMeta(); renderAll(); } } }),
+        Object.assign(el("button", { className: "btn sm danger", textContent: "Löschen" }), { onclick: async () => {
+          if (!confirm(`„${v.name}“ löschen? Es wird auch aus Vorlagen entfernt.`)) return;
+          if (await act(() => api(`/api/vehicles/${v.id}`, { method: "DELETE" }), "Gelöscht.")) { selected = selected.filter((s) => s.vehicle_id !== v.id); await loadMeta(); renderAll(); } } })));
+    });
+  }
+  $("nv_add").addEventListener("click", async () => {
+    const name = $("nv_name").value.trim(); if (!name) return toast("Name fehlt.", true);
+    if (await act(() => api("/api/vehicles", { method: "POST", body: { name, kind: $("nv_kind").value.trim(), active: true } }), "Fahrzeug angelegt.")) {
+      $("nv_name").value = ""; $("nv_kind").value = ""; await loadMeta(); renderAll();
+    }
+  });
+
+  // ---------------- Historie ----------------
+  async function renderHistory() {
+    const hist = await act(() => api("/api/history")); if (!hist) return;
+    const box = $("histList"); box.innerHTML = "";
+    if (!hist.length) box.append(el("div", { className: "muted small", textContent: "Noch keine Einsätze." }));
+    hist.forEach((h) => box.append(el("div", { className: "item" },
+      el("span", { className: "grow" }, el("b", { textContent: (h.exercise ? "[Übung] " : "") + h.stichwort }),
+        el("div", { className: "muted small", textContent: `${fmt(h.zeit)} · ${h.adresse || "–"}${h.distance_m ? " · " + (h.distance_m / 1000).toFixed(1) + " km" : ""}` })),
+      Object.assign(el("button", { className: "btn sm", textContent: "Ins Formular laden" }), { onclick: () => {
+        showTab("incident"); $("f_template").value = "";
+        loadTemplate({ name: "", stichwort: h.stichwort, adresse: h.adresse, lat: h.ziel?.lat, lon: h.ziel?.lon, infos: h.infos,
+                       valid_minutes: h.valid_minutes, exercise: h.exercise,
+                       vehicle_ids: (h.fleet || []).slice().sort((a, b) => a.order - b.order).map((f) => f.vehicle_id).filter(Boolean) });
+      } }))));
+  }
+  $("histClear").addEventListener("click", () => { if (confirm("Gesamte Historie löschen?")) act(() => api("/api/history", { method: "DELETE" }), "Historie gelöscht.").then(renderHistory); });
+
+  // ---------------- Einstellungen ----------------
+  function fmtT(d) { return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+  function renderSun() {
+    const st = { lat: parseFloat($("s_lat").value), lon: parseFloat($("s_lon").value) };
+    if (isNaN(st.lat) || isNaN(st.lon)) return;
+    const t = Theme.sunTimes(new Date(new Date().setHours(12, 0, 0, 0)), st.lat, st.lon);
+    $("sunInfo").textContent = t.polar ? "Heute keine Sonnenauf-/untergänge (Polarregion)."
+      : `Heute: Sonnenaufgang ${fmtT(t.sunrise)} Uhr · Sonnenuntergang ${fmtT(t.sunset)} Uhr – dazwischen hell, sonst dunkel.`;
+  }
+  function renderSettings() {
+    const s = META.settings;
+    $("s_agency").value = s.agency_name; $("s_lat").value = s.station.lat; $("s_lon").value = s.station.lon;
+    $("s_valid").value = s.valid_minutes_default; $("s_theme").value = s.theme_mode; $("s_weather").checked = s.weather_enabled;
+    const sel = $("s_sound"); sel.innerHTML = "";
+    const eff = META.effective_sound;
+    sel.append(el("option", { value: "", textContent: `Automatisch (${eff || "kein Ton"})` }));
+    META.sounds.forEach((x) => sel.append(el("option", { value: x.filename, textContent: `${x.filename} (${Math.round(x.size / 1024)} KB)` })));
+    sel.value = s.sound || ""; renderSun();
+  }
+  ["s_lat", "s_lon"].forEach((i) => $(i).addEventListener("input", renderSun));
+  $("s_soundTest").addEventListener("click", () => {
+    const f = $("s_sound").value || META.effective_sound; if (!f) return;
+    const a = $("testAudio"); a.src = "/static/sounds/" + encodeURIComponent(f); a.currentTime = 0; a.play().catch(() => toast("Wiedergabe nicht möglich.", true));
+  });
+  $("s_save").addEventListener("click", async () => {
+    const body = { theme_mode: $("s_theme").value, agency_name: $("s_agency").value.trim(),
+      station: { lat: parseFloat($("s_lat").value), lon: parseFloat($("s_lon").value) },
+      valid_minutes_default: parseInt($("s_valid").value), sound: $("s_sound").value || null, weather_enabled: $("s_weather").checked };
+    if (await act(() => api("/api/settings", { method: "PUT", body }), "Einstellungen gespeichert – Dashboard aktualisiert sich automatisch.")) { await loadMeta(); renderSettings(); }
+  });
+  $("p_save").addEventListener("click", async () => {
+    if (await act(() => api("/api/password", { method: "POST", body: { current: $("p_cur").value, new: $("p_new").value } }), "Passwort geändert.")) {
+      $("p_cur").value = ""; $("p_new").value = ""; $("pwBanner").classList.add("hidden");
+    }
+  });
+
+  function renderAll() { renderTemplateSelect(); renderVehicleSelect(); renderTemplates(); renderVehicles(); renderSettings(); }
+  boot();
+  </script>
+</body>
+</html>

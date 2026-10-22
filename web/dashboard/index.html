@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feuerwehr – Alarm Monitor</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <script src="/static/shared/theme.js"></script>
+  <style>
+    /* ---------- Theme-Variablen: dunkel (Standard) und hell ---------- */
+    :root, :root[data-theme="dark"]{
+      color-scheme: dark;
+      --bg: #0f1115; --panel: #151a23; --panel-2: #10131a;
+      --text: #e8edf4; --muted: #a7b1c2; --border: #2a3240; --border-hover:#3a4354;
+      --accent: #d62828; --blue: #3b82f6;
+      --ok: #16a34a; --warn: #f59e0b; --danger: #ef4444;
+      --glass: rgba(255,255,255,.02); --glass-strong: rgba(255,255,255,.04);
+      --shadow: 0 8px 24px rgba(0,0,0,.35);
+      --glow-1: rgba(214,40,40,.12); --glow-2: rgba(255,183,3,.08);
+      --legend-bg: rgba(16,19,26,.82);
+      --order-bg: rgba(214,40,40,.12); --order-text:#ffdede; --order-border:#7a1b1b;
+      --st-ready-bg: rgba(22,163,74,.12); --st-ready-tx:#bff3cc; --st-ready-bd: rgba(22,163,74,.35);
+      --st-out-bg: rgba(245,158,11,.14); --st-out-tx:#ffe6b8; --st-out-bd: rgba(245,158,11,.38);
+      --st-en-bg: rgba(214,40,40,.16); --st-en-tx:#ffdede; --st-en-bd: rgba(214,40,40,.4);
+      --pill-bg:#0f131b;
+      --tile-filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.9) saturate(.8);
+    }
+    :root[data-theme="light"]{
+      color-scheme: light;
+      --bg: #eef1f6; --panel: #ffffff; --panel-2: #f3f5f9;
+      --text: #172033; --muted: #5a6578; --border: #d5dbe6; --border-hover:#b7c0cf;
+      --accent: #c81e1e; --blue: #2563eb;
+      --ok: #15803d; --warn: #d97706; --danger: #dc2626;
+      --glass: rgba(0,0,0,.015); --glass-strong: rgba(0,0,0,.03);
+      --shadow: 0 6px 18px rgba(30,40,70,.12);
+      --glow-1: rgba(214,40,40,.07); --glow-2: rgba(255,183,3,.10);
+      --legend-bg: rgba(255,255,255,.88);
+      --order-bg: rgba(214,40,40,.08); --order-text:#9b1c1c; --order-border:#e7a8a8;
+      --st-ready-bg: rgba(22,163,74,.12); --st-ready-tx:#14532d; --st-ready-bd: rgba(22,163,74,.45);
+      --st-out-bg: rgba(245,158,11,.16); --st-out-tx:#7c4a03; --st-out-bd: rgba(217,119,6,.5);
+      --st-en-bg: rgba(214,40,40,.12); --st-en-tx:#991b1b; --st-en-bd: rgba(214,40,40,.5);
+      --pill-bg:#eef1f6;
+      --tile-filter: none;
+    }
+    *{ box-sizing: border-box; }
+    [hidden]{ display:none !important; }
+    html, body{ height:100%; }
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      background: radial-gradient(1200px 800px at 15% -10%, var(--glow-1), transparent 65%),
+                  radial-gradient(1000px 700px at 95% 110%, var(--glow-2), transparent 60%),
+                  var(--bg);
+      background-attachment: fixed;
+      color:var(--text);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      transition: background-color .6s ease, color .6s ease;
+    }
+    .app{ min-height:100vh; display:grid; grid-template-rows:auto 1fr auto; gap:16px; padding:16px; }
+    .topbar{
+      display:flex; align-items:center; justify-content: space-between; gap:12px; flex-wrap:wrap;
+      background: linear-gradient(180deg, var(--glass), transparent), var(--panel);
+      border:1px solid var(--border); border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .brand{ display:flex; align-items:center; gap: 12px; }
+    .brand .logo{ width: 28px; height: 28px; border-radius: 8px; display:grid; place-items:center;
+      background: radial-gradient(80% 80% at 50% 20%, rgba(214,40,40,.6), rgba(214,40,40,.2)), linear-gradient(180deg, #821d1d, #4c1010);
+      border: 1px solid #7a1b1b; box-shadow: 0 6px 16px rgba(214,40,40,.3); }
+    .brand .title{ font-weight: 800; letter-spacing:.4px; font-size: clamp(16px, 2.2vw, 22px); }
+    .controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .pill{
+      border:1px solid var(--border); background: linear-gradient(180deg, var(--glass-strong), transparent);
+      color: var(--text); padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight:700; letter-spacing:.2px;
+      cursor:pointer; font-family:inherit; white-space:nowrap;
+    }
+    button.pill:hover{ border-color:var(--border-hover); }
+    .pill.static{ cursor:default; }
+    .clock{ font-variant-numeric: tabular-nums; font-weight:800; font-size:18px; }
+    .weather{ display:flex; align-items:center; gap:8px; }
+    .weather .ic{ font-size:20px; line-height:1; }
+    .weather .stale{ opacity:.6; }
+    .conn{ display:none; background: rgba(239,68,68,.15); border-color: rgba(239,68,68,.5); color: var(--danger); }
+    .conn.show{ display:inline-block; }
+    .sound-warn{ display:none; background: rgba(245,158,11,.16); border-color: rgba(245,158,11,.5); color: var(--warn); }
+    .sound-warn.show{ display:inline-block; }
+    .grid{ display:grid; gap:16px; grid-template-columns: 1.1fr 1.9fr; }
+    @media (max-width: 1100px){ .grid{ grid-template-columns: 1fr; } }
+    .vstack{ display:grid; gap:16px; align-content:start; }
+    .card{
+      background: linear-gradient(180deg, var(--glass), transparent), var(--panel);
+      border:1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow);
+    }
+    .tag{ display:inline-block; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .stichwort{ position: relative; padding-left: 14px; border-left: 4px solid var(--accent); margin-bottom: 12px; }
+    .stichwort h1{ margin: 6px 0 0 0; font-size: clamp(28px, 4.2vw, 54px); line-height:1.08; letter-spacing: .2px; text-wrap: balance; }
+    .exercise{ display:none; margin-left:8px; padding:3px 10px; border-radius:8px; background: var(--warn); color:#1b1300; font-weight:800; letter-spacing:.1em; font-size:.8rem; vertical-align: middle; }
+    .exercise.show{ display:inline-block; }
+    .meta-grid{ display:grid; gap:12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 680px){ .meta-grid{ grid-template-columns: 1fr; } }
+    .kpi{ display:flex; align-items:center; justify-content: space-between; background: var(--panel-2);
+      border:1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-variant-numeric: tabular-nums; }
+    .kpi strong{ font-size: clamp(14px, 1.6vw, 18px); } .kpi span{ color: var(--muted); }
+    .address{ display:flex; align-items:center; gap: 8px; background: var(--panel-2);
+      border:1px solid var(--border); border-radius: 12px; padding: 12px; font-size: clamp(14px, 1.4vw, 18px); }
+    #map{ height:100%; min-height: 420px; border-radius: 14px; overflow:hidden; border:1px solid var(--border); box-shadow: var(--shadow); background: var(--panel-2); }
+    #map .leaflet-tile-pane{ filter: var(--tile-filter); }
+    .map-legend{ position:absolute; left:12px; bottom:12px; z-index:500; background: var(--legend-bg); backdrop-filter: blur(6px);
+      border:1px solid var(--border); border-radius: 10px; padding:6px 10px; display:flex; align-items:center; gap:12px; font-size:12px; color: var(--muted); }
+    .map-note{ position:absolute; right:12px; bottom:12px; z-index:500; background: var(--legend-bg); border:1px solid var(--border);
+      border-radius:10px; padding:6px 10px; font-size:12px; color: var(--muted); display:none; }
+    .map-note.show{ display:block; }
+    .dot{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; border:1px solid rgba(255,255,255,.6); }
+    .dot.start{ background: var(--blue); } .dot.dest{ background: var(--accent); } .dot.route{ width:14px; height:4px; border-radius:10px; background: var(--accent); border:none; }
+    .route-metrics{ display:flex; gap:18px; flex-wrap: wrap; color: var(--muted); } .route-metrics strong{ color: var(--text); }
+    .fleet{ background: linear-gradient(180deg, var(--glass), transparent), var(--panel); border:1px solid var(--border);
+      border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow); }
+    .fleet .head{ display:flex; align-items:center; justify-content: space-between; margin-bottom: 10px; }
+    .fleet-list{ display:grid; gap:12px; grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 1200px){ .fleet-list{ grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 900px){ .fleet-list{ grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 620px){ .fleet-list{ grid-template-columns: 1fr; } }
+    .vehicle-card{ display:flex; align-items:center; gap:14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+    .vehicle-card .order{ width: 40px; height: 40px; border-radius: 10px; display:grid; place-items:center; font-weight: 800; font-size: 20px;
+      background: var(--order-bg); border:1px solid var(--order-border); color:var(--order-text); }
+    .vehicle-card .name{ font-weight: 700; font-size: clamp(16px, 2vw, 20px); } .vehicle-card .spacer{ flex:1 1 auto; }
+    .status-pill{ display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius: 999px; font-weight:700; letter-spacing:.2px; font-size:13px;
+      background: var(--pill-bg); border:1px solid var(--border); color: var(--muted); }
+    .status-pill .dot{ margin:0; width:8px; height:8px; border:none; }
+    .status-ready{ background: var(--st-ready-bg); color:var(--st-ready-tx); border-color: var(--st-ready-bd); } .status-ready .dot{ background: var(--ok); }
+    .status-out{ background: var(--st-out-bg); color:var(--st-out-tx); border-color: var(--st-out-bd); } .status-out .dot{ background: var(--warn); }
+    .status-enroute{ background: var(--st-en-bg); color:var(--st-en-tx); border-color: var(--st-en-bd); } .status-enroute .dot{ background: var(--danger);
+      box-shadow: 0 0 0 0 rgba(239,68,68,.6); animation: pulse 1.8s ease-out infinite; }
+    @keyframes pulse{ 0%{ box-shadow: 0 0 0 0 rgba(239,68,68,.70);} 70%{ box-shadow: 0 0 0 16px rgba(239,68,68,0);} 100%{ box-shadow:0 0 0 0 rgba(239,68,68,0);} }
+
+    body[data-mode="idle"] .active-only{ display:none !important; }
+    body[data-mode="active"] .idle-only{ display:none !important; }
+    .idle-wrap{ display:grid; gap:16px; grid-template-columns: 1.3fr 1.7fr; }
+    @media (max-width: 1100px){ .idle-wrap{ grid-template-columns: 1fr; } }
+    .big-time{ font-size: clamp(24px, 6vw, 72px); font-weight: 800; letter-spacing: .5px; font-variant-numeric: tabular-nums; }
+    .sub{ color: var(--muted); }
+    .hist-list{ display:grid; gap:12px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    @media (max-width: 900px){ .hist-list{ grid-template-columns: 1fr; } }
+    .hist-item{ background: var(--panel-2); border:1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .hist-item .h-top{ display:flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .hist-item .h-title{ font-weight: 800; }
+    .hist-item .h-meta{ font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+    .stats-grid{ display:grid; gap:12px; grid-template-columns: repeat(3, minmax(0,1fr)); }
+    @media (max-width: 900px){ .stats-grid{ grid-template-columns: 1fr; } }
+    .stat{ background: var(--panel-2); border:1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .stat .n{ font-size: clamp(18px, 3vw, 32px); font-weight: 800; }
+    .muted{ color: var(--muted); }
+    .foot{ color: var(--muted); text-align:center; font-size: 12px; margin-top: 4px; }
+    .flash-overlay{ position: fixed; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.6), rgba(214,40,40,.2), transparent 65%);
+      opacity: 0; transition: opacity .25s ease; z-index: 999; }
+    .flash-overlay.on{ opacity: .8; }
+  </style>
+</head>
+<body data-mode="idle">
+  <div class="flash-overlay" id="flash"></div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" role="img" aria-label="Flamme">
+            <path d="M13.5 2s1.5 6-4 9c-1.8 1-3.5 2.9-3.5 5.2 0 3.3 2.8 6 6.3 6 3.5 0 6.3-2.7 6.3-6 0-4.6-3.1-6.8-5.1-9.5-.9-1.2-1.3-2.7-0.9-4.7Z" fill="url(#g)"/>
+            <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="24"><stop stop-color="#ffb703"/><stop offset="1" stop-color="#d62828"/></linearGradient></defs>
+          </svg>
+        </div>
+        <div class="title" id="brandName">Feuerwehr</div>
+      </div>
+      <div class="controls">
+        <span class="pill conn" id="connWarn">⚠ Keine Verbindung</span>
+        <button class="pill sound-warn" id="soundWarn" title="Browser blockiert Ton – einmal klicken">🔇 Ton freigeben</button>
+        <div class="pill static weather" id="weather" hidden></div>
+        <span class="pill static clock" id="clock">--:--</span>
+        <button id="muteBtn" class="pill" title="Töne stummschalten/aktivieren">🔊 Ton</button>
+        <button id="fsBtn" class="pill" title="Vollbild umschalten">⤢ Vollbild</button>
+      </div>
+    </header>
+
+    <!-- ACTIVE STATE -->
+    <main class="grid active-only">
+      <section class="left vstack">
+        <div class="card">
+          <div class="tag">Alarmierungsstichwort <span class="exercise" id="exerciseBadge">ÜBUNG</span></div>
+          <div class="stichwort"><h1 id="stichwort">–</h1></div>
+          <div class="meta-grid">
+            <div class="kpi"><strong>Alarmierung:</strong><span id="alarmTimeKpi">--</span></div>
+            <div class="kpi"><strong>Gültig bis</strong><span id="validUntilKpi">--</span></div>
+          </div>
+          <div class="meta-grid" style="margin-top:12px;">
+            <div class="kpi"><strong>Verstrichene Zeit</strong><span id="elapsed">00:00</span></div>
+            <div class="kpi"><strong>Restlaufzeit</strong><span id="remaining">--:--</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="tag">Additionale Infos der Leitstelle</div>
+          <ul id="infoList" style="margin:8px 0 0 0; padding-left:18px;"><li>–</li></ul>
+        </div>
+        <div class="card">
+          <div class="tag">Einsatzadresse</div>
+          <div id="adresse" class="address">–</div>
+        </div>
+        <div class="card">
+          <div class="tag">Anfahrtsweg</div>
+          <div class="route-metrics">
+            <div><strong>Distanz:</strong> <span id="routeDistance">–</span></div>
+            <div><strong>ETA (Routing):</strong> <span id="routeETA">–</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="map-panel" style="position:relative;">
+        <div id="map" aria-label="Karte mit Anfahrtsweg"></div>
+        <div class="map-legend">
+          <span><span class="dot start"></span>Wache</span>
+          <span><span class="dot dest"></span>Einsatzort</span>
+          <span><span class="dot route"></span>Route</span>
+        </div>
+        <div class="map-note" id="mapNote">Kartenhintergrund offline – Route wird trotzdem angezeigt</div>
+      </section>
+    </main>
+
+    <!-- IDLE STATE -->
+    <main class="idle-only">
+      <div class="idle-wrap">
+        <section class="card">
+          <div class="tag">Status</div>
+          <div class="big-time" id="sinceLast">–</div>
+          <div class="sub">Zeit seit der letzten Alarmierung</div>
+          <div style="height:12px;"></div>
+          <div class="stats-grid">
+            <div class="stat"><div class="muted">Alarmierungen heute</div><div class="n" id="statToday">0</div></div>
+            <div class="stat"><div class="muted">Letzte 24h</div><div class="n" id="stat24h">0</div></div>
+            <div class="stat"><div class="muted">Letzte 7 Tage</div><div class="n" id="stat7d">0</div></div>
+          </div>
+        </section>
+        <section class="card">
+          <div class="tag">Historie</div>
+          <div id="histList" class="hist-list"></div>
+        </section>
+      </div>
+      <div class="foot">Wartet auf neue Alarmierung …</div>
+    </main>
+
+    <section class="fleet active-only">
+      <div class="head"><div class="tag">Ausrücken-Reihenfolge</div></div>
+      <div id="fleetList" class="fleet-list"></div>
+      <div class="foot">Daten kommen live vom Backend.</div>
+    </section>
+  </div>
+
+  <audio id="alarmAudio" preload="auto"></audio>
+
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      brandName: $("brandName"), stichwort: $("stichwort"), infoList: $("infoList"), adresse: $("adresse"),
+      alarmTimeKpi: $("alarmTimeKpi"), validUntilKpi: $("validUntilKpi"), elapsed: $("elapsed"), remaining: $("remaining"),
+      routeDistance: $("routeDistance"), routeETA: $("routeETA"), fleetList: $("fleetList"),
+      muteBtn: $("muteBtn"), fsBtn: $("fsBtn"), flash: $("flash"), histList: $("histList"), sinceLast: $("sinceLast"),
+      statToday: $("statToday"), stat24h: $("stat24h"), stat7d: $("stat7d"), audio: $("alarmAudio"),
+      exercise: $("exerciseBadge"), clock: $("clock"), weather: $("weather"), connWarn: $("connWarn"),
+      soundWarn: $("soundWarn"), mapNote: $("mapNote"),
+    };
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const fmtDateTime = (d) => new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(d);
+
+    // ---------- Einstellungen vom Server (Theme, Name, Ton, Wetter) ----------
+    let SETTINGS = null;
+    let STATUS_CSS = {};
+    function applySettings(s) {
+      if (!s) return;
+      SETTINGS = s;
+      STATUS_CSS = Object.fromEntries((s.statuses || []).map((x) => [x.key, x.css]));
+      Theme.set({ mode: s.theme_mode, station: s.station });
+      if (!activeAlarm) els.brandName.textContent = s.agency_name || "Feuerwehr";
+      if (s.sound_url && els.audio.getAttribute("src") !== s.sound_url) {
+        els.audio.src = s.sound_url;
+        try { els.audio.load(); } catch (_) {}
+      }
+      loadWeather();
+    }
+
+    // ---------- Uhr ----------
+    function tickClock() {
+      const d = new Date();
+      els.clock.textContent = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+    tickClock(); setInterval(tickClock, 5000);
+
+    // ---------- Wetter ----------
+    async function loadWeather() {
+      if (!SETTINGS || !SETTINGS.weather_enabled) { els.weather.hidden = true; return; }
+      try {
+        const w = await (await fetch("/api/weather")).json();
+        if (!w.ok) { els.weather.hidden = true; return; }
+        els.weather.hidden = false;
+        els.weather.className = "pill static weather" + (w.stale ? " stale" : "");
+        els.weather.title = `${w.text} · gefühlt ${w.feels_like} °C · Luftfeuchte ${w.humidity ?? "–"} % · Niederschlag ${w.precip_mm} mm · Stand ${w.updated}`;
+        els.weather.innerHTML = "";
+        const ic = Object.assign(document.createElement("span"), { className: "ic", textContent: w.icon });
+        const t = document.createElement("span");
+        t.textContent = `${w.temp.toString().replace(".", ",")} °C · ${w.text} · Wind ${w.wind_kmh} km/h ${w.wind_dir}`;
+        els.weather.append(ic, t);
+      } catch (_) { /* offline: letzte Anzeige bleibt */ }
+    }
+    setInterval(loadWeather, 10 * 60 * 1000);
+
+    // ---------- Audio ----------
+    let AUDIO_ENABLED = true;
+    els.muteBtn.addEventListener("click", () => {
+      AUDIO_ENABLED = !AUDIO_ENABLED;
+      els.muteBtn.textContent = AUDIO_ENABLED ? "🔊 Ton" : "🔇 Stumm";
+    });
+    function unlockAudio() {
+      const el = els.audio;
+      el.muted = true;
+      el.play().then(() => { el.pause(); el.currentTime = 0; el.muted = false; els.soundWarn.classList.remove("show"); })
+        .catch(() => { el.muted = false; });
+    }
+    window.addEventListener("click", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+    els.soundWarn.addEventListener("click", unlockAudio);
+
+    function playAlarmTone() {
+      if (!AUDIO_ENABLED) return;
+      const el = els.audio;
+      if (!el.getAttribute("src")) return;
+      el.currentTime = 0;
+      el.play().then(() => els.soundWarn.classList.remove("show"))
+        .catch((e) => { console.warn("Audio play failed:", e); els.soundWarn.classList.add("show"); });
+    }
+
+    function flashScreen() {
+      els.flash.classList.add("on");
+      setTimeout(() => els.flash.classList.remove("on"), 250);
+    }
+
+    // ---------- Karte ----------
+    let map, routeLayer, startMarker, zielMarker;
+    function ensureMap() {
+      if (map) return;
+      map = L.map("map", { zoomControl: false, attributionControl: false });
+      const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      tiles.on("tileerror", () => els.mapNote.classList.add("show"));
+      tiles.on("tileload", () => els.mapNote.classList.remove("show"));
+      L.control.scale({ position: "topright", metric: true, imperial: false }).addTo(map);
+    }
+    function renderRoute(route) {
+      ensureMap();
+      [routeLayer, startMarker, zielMarker].forEach((l) => l && l.remove());
+      routeLayer = startMarker = zielMarker = null;
+      if (!route || !route.geometry) { map.setView([SETTINGS?.station?.lat ?? 49.69, SETTINGS?.station?.lon ?? 8.65], 13); return; }
+      routeLayer = L.polyline(route.geometry, { color: "#d62828", weight: 6, opacity: .9, dashArray: route.approximate ? "10 10" : null }).addTo(map);
+      const mk = (c, color, label) => L.circleMarker([c.lat, c.lon], { radius: 8, weight: 2, color: "#ffffff", fillColor: color, fillOpacity: .95 })
+        .addTo(map).bindTooltip(label, { permanent: true, direction: "right" });
+      if (route.start) startMarker = mk(route.start, "#3b82f6", "Wache");
+      if (route.ziel) zielMarker = mk(route.ziel, "#d62828", "Einsatzort");
+      map.fitBounds(routeLayer.getBounds().pad(0.18));
+    }
+
+    // ---------- Fahrzeuge ----------
+    function statusClass(status) {
+      const css = STATUS_CSS[status];
+      if (css) return "status-" + css;
+      const s = (status || "").toLowerCase();       // Fallback für freie Status-Texte
+      if (s.includes("bereit") || s.includes("vor ort")) return "status-ready";
+      if (s.includes("anfahr") || s.includes("anmarsch")) return "status-enroute";
+      if (s.includes("rückt") || s.includes("aus") || s.includes("alarm")) return "status-out";
+      return "";
+    }
+    function renderFleet(fleet) {
+      els.fleetList.innerHTML = "";
+      for (const v of [...(fleet || [])].sort((a, b) => a.order - b.order)) {
+        const card = document.createElement("div"); card.className = "vehicle-card";
+        const order = Object.assign(document.createElement("div"), { className: "order", textContent: v.order });
+        const name = Object.assign(document.createElement("div"), { className: "name", textContent: v.name });
+        const spacer = Object.assign(document.createElement("div"), { className: "spacer" });
+        const pill = document.createElement("div"); pill.className = "status-pill " + statusClass(v.status);
+        pill.append(Object.assign(document.createElement("span"), { className: "dot" }),
+                    Object.assign(document.createElement("span"), { textContent: v.status }));
+        card.append(order, name, spacer, pill);
+        els.fleetList.appendChild(card);
+      }
+    }
+
+    // ---------- Modi ----------
+    function setMode(mode) { document.body.setAttribute("data-mode", mode); if (mode === "active" && map) setTimeout(() => map.invalidateSize(), 50); }
+    let activeAlarm = null, lastAlarmId = null;
+    const timers = { elapsed: null, remaining: null, sinceLast: null };
+    function clearTimers() { for (const k of Object.keys(timers)) { if (timers[k]) { clearInterval(timers[k]); timers[k] = null; } } }
+
+    function renderActive(payload, fresh) {
+      activeAlarm = payload;
+      setMode("active");
+      clearTimers();
+      els.brandName.textContent = payload.agencyName || SETTINGS?.agency_name || "Feuerwehr";
+      els.stichwort.textContent = payload.stichwort;
+      els.exercise.classList.toggle("show", !!payload.exercise);
+      els.adresse.textContent = payload.adresse || "—";
+      els.infoList.innerHTML = "";
+      const infos = payload.infos && payload.infos.length ? payload.infos : ["–"];
+      infos.forEach((t) => { const li = document.createElement("li"); li.textContent = t; els.infoList.appendChild(li); });
+
+      const alarmDate = new Date(payload.zeit), validUntil = new Date(payload.valid_until);
+      els.alarmTimeKpi.textContent = fmtDateTime(alarmDate);
+      els.validUntilKpi.textContent = fmtDateTime(validUntil);
+      const mmss = (ms) => `${pad2(Math.floor(ms / 60000))}:${pad2(Math.floor((ms % 60000) / 1000))}`;
+      const tick = () => {
+        const now = new Date();
+        els.elapsed.textContent = mmss(Math.max(0, now - alarmDate));
+        els.remaining.textContent = mmss(Math.max(0, validUntil - now));
+      };
+      tick(); timers.elapsed = setInterval(tick, 1000);
+
+      renderRoute(payload.route || null);
+      if (payload.route && payload.route.distance_m != null) {
+        const approx = payload.route.approximate ? "≈ " : "";
+        els.routeDistance.textContent = `${approx}${(payload.route.distance_m / 1000).toFixed(1)} km`;
+        els.routeETA.textContent = `${approx}${Math.max(1, Math.round((payload.route.duration_s || 0) / 60))} min` + (payload.route.approximate ? " (Luftlinie)" : "");
+      } else {
+        els.routeDistance.textContent = "–"; els.routeETA.textContent = "–";
+      }
+      renderFleet(payload.fleet || []);
+      if (fresh) { flashScreen(); if (payload.play_sound !== false) playAlarmTone(); }
+    }
+
+    function humanizeSince(ms) {
+      const s = Math.max(0, Math.floor(ms / 1000));
+      const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+      return (d > 0 ? `${d}T ` : "") + `${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
+    }
+
+    function renderIdle(history) {
+      activeAlarm = null;
+      setMode("idle");
+      clearTimers();
+      if (SETTINGS) els.brandName.textContent = SETTINGS.agency_name;
+      const hist = history || [];
+      if (hist.length) {
+        const lastDate = new Date(hist[hist.length - 1].zeit);
+        const update = () => { els.sinceLast.textContent = humanizeSince(new Date() - lastDate); };
+        update(); timers.sinceLast = setInterval(update, 1000);
+      } else {
+        els.sinceLast.textContent = "—";
+      }
+      const now = new Date();
+      let cToday = 0, c24 = 0, c7 = 0;
+      for (const h of hist) {
+        const t = new Date(h.zeit);
+        if (t.toDateString() === now.toDateString()) cToday++;     // lokaler Kalendertag
+        if (now - t <= 24 * 3600e3) c24++;
+        if (now - t <= 7 * 24 * 3600e3) c7++;
+      }
+      els.statToday.textContent = cToday; els.stat24h.textContent = c24; els.stat7d.textContent = c7;
+
+      els.histList.innerHTML = "";
+      for (const h of hist.slice(-10).reverse()) {
+        const item = document.createElement("div"); item.className = "hist-item";
+        const top = document.createElement("div"); top.className = "h-top";
+        const title = Object.assign(document.createElement("div"), { className: "h-title", textContent: (h.exercise ? "[Übung] " : "") + (h.stichwort || "Alarm") });
+        const km = h.distance_m ? (h.distance_m / 1000).toFixed(1) + " km" : "–";
+        const min = h.duration_s ? Math.round(h.duration_s / 60) + " min" : "–";
+        const meta = Object.assign(document.createElement("div"), { className: "h-meta", textContent: `${fmtDateTime(new Date(h.zeit))} · ${km} · ${min}` });
+        top.append(title, meta);
+        item.append(top, Object.assign(document.createElement("div"), { className: "muted", textContent: h.adresse || "—" }));
+        els.histList.appendChild(item);
+      }
+    }
+
+    // ---------- Vollbild ----------
+    els.fsBtn.addEventListener("click", () => {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.();
+    });
+    document.addEventListener("fullscreenchange", () => {
+      els.fsBtn.textContent = document.fullscreenElement ? "⤢ Vollbild verlassen" : "⤢ Vollbild";
+    });
+
+    // ---------- WebSocket (mit Heartbeat + automatischem Reconnect) ----------
+    function handle(msg) {
+      switch (msg.type) {
+        case "hello": {
+          const { state, history, settings } = msg.payload || {};
+          applySettings(settings);
+          const a = state?.current_alarm;
+          if (a) { renderActive(a, a.id !== lastAlarmId); lastAlarmId = a.id; }
+          else renderIdle(history);
+          break;
+        }
+        case "alarm": lastAlarmId = msg.payload.id; renderActive(msg.payload, true); break;
+        case "fleet": if (activeAlarm && activeAlarm.id === msg.payload.id) { activeAlarm.fleet = msg.payload.fleet; renderFleet(activeAlarm.fleet); } break;
+        case "idle": renderIdle(msg.payload?.last_history); break;
+        case "settings": applySettings(msg.payload); break;
+      }
+    }
+    function connectWS() {
+      const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+      let lastSeen = Date.now(), hb;
+      ws.onopen = () => {
+        els.connWarn.classList.remove("show");
+        hb = setInterval(() => {
+          if (Date.now() - lastSeen > 45000) { try { ws.close(); } catch (_) {} return; }
+          try { ws.send("ping"); } catch (_) {}
+        }, 15000);
+      };
+      ws.onmessage = (ev) => {
+        lastSeen = Date.now();
+        try { handle(JSON.parse(ev.data)); } catch (e) { console.error(e); }
+      };
+      ws.onclose = () => { clearInterval(hb); els.connWarn.classList.add("show"); setTimeout(connectWS, 2000); };
+      ws.onerror = () => { try { ws.close(); } catch (_) {} };
+    }
+    connectWS();
+  </script>
+</body>
+</html>
