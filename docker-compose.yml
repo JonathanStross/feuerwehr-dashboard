@@ -1,0 +1,44 @@
+# Zwei Adressen, ein Image:
+#   http://<host>:8080  -> Dashboard (Anzeige)
+#   http://<host>:8081  -> Maintenance (Einsätze anlegen/planen, Einstellungen) – passwortgeschützt
+services:
+  dashboard:
+    build: .
+    image: feuerwehr-dashboard:latest
+    container_name: fw-dashboard
+    command: uvicorn app.dashboard.main:app --host 0.0.0.0 --port 8080
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-https://router.project-osrm.org}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  maintenance:
+    build: .
+    image: feuerwehr-dashboard:latest
+    container_name: fw-maintenance
+    command: uvicorn app.maintenance.main:app --host 0.0.0.0 --port 8081
+    ports:
+      - "${MAINTENANCE_PORT:-8081}:8081"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      DASHBOARD_URL: http://dashboard:8080
+      MAINTENANCE_PASSWORD: ${MAINTENANCE_PASSWORD:-feuerwehr}
+    depends_on:
+      - dashboard
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8081/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
